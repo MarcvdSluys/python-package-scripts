@@ -4,5 +4,18 @@ Here are the bash scripts I use to create and check Python packages and to uploa
 very much tailored to my usage and laptop system, but you may want to adapt them for your case.  The main
 reason for these is my faulty memory --- as I do not perform most of these tasks on a daily basis, I need to
 look up how to do them.  I basically turned my notes in to bash scripts.  Note that not very much design went
-into writing these scripts; they evolved organically as my needs became clear.
+into writing these scripts; they evolved organically as my needs became clear.  I tried to list the
+dependencies of each script in their headers; please let me know if I missed anything.
+
+
+* Main scripts
+- python-package-pypi-new :: create a new Python package.
+- python-package-upload-pypi :: upload a Python package to PyPI using "twine upload".
+  - note that this script needs to dig up an access token for PyPI.
+
+
+The other scripts are dependecies of these two.  All scripts depend on basic tools that are available on every
+self-respecting operating system: ~bash~, ~echo~, ~cat~, ~read~, ~grep~, ~sed~, ~sort~, ~uniq~, ~git~, etc., but also the Python
+packages ~pre-commit~, ~(flake8)~, ~pipreqs~ and ~twine~ and the PERL ~cdif~ which I prefer over diff.
+
 

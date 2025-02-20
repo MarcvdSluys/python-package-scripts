@@ -3,7 +3,8 @@
 ##  python-package-upload-pypi: create and upload the Python package in the current directory to PyPI using twine.
 ## 
 ##  Dependencies:
-##    - default (GNU) tools available on every serious operating system: bash, echo, cat, grep, sed, find, stat, git, etc.
+##    - default (GNU) tools available on every serious operating system: bash, echo, cat, grep, sed, find, stat, tar, gzip, zip, git, etc.
+##    - Python packages: twine
 ##    - custom scripts: python-check-installed-packages, python-package-version-update, python-check-precommit, python-package-docs-check, python-package-deps-from-code, python-package-requirements-txt, age
 ## 
 ##  2020-08-20, MvdS: initial version, taken from setup.py in package meteoserver.
