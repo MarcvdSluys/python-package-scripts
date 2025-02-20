@@ -1,0 +1,69 @@
+#!/bin/bash
+
+##  age: Print the age of a file in days.
+## 
+##  Dependencies:
+##    - default (GNU) tools available on every serious operating system: ls. echo, date, stat, etc.
+## 
+##  Mvds, 2013-03-02: Initial version, inspired by: http://superuser.com/questions/169858
+##  MvdS: 2013-07-31:
+##                  + list multiple files/dirs
+##                  + list all files/dirs in current directory when called without options
+##                  + show ages in seconds/minutes/hours/days/months/years
+##                  + added colours
+
+
+options=`ls -drt ${@}`
+
+if [ ${#} -eq 0 ]; then
+    # echo -e "\n  Syntax: ${0} <files/dirs>\n"
+    # exit 1
+    options=`ls -rt`
+fi
+
+for file in ${options}; do
+    stat=$(stat --printf="%Y %F\n" "${file}")
+    
+    age=$(( $(date +%s) - ${stat%% *} ))
+    unit="seconds"
+    if [ ${age} -eq 1 ]; then
+        unit="second"
+    fi
+    
+    if [ ${age} -ge 120 ]; then  # If >120s, use minutes
+        age=$(( ${age}/60 ))
+        unit="minutes"
+        if [ ${age} -ge 120 ]; then  # If >120min, use hours
+            age=$(( ${age}/60 ))
+            unit="hours"
+            if [ ${age} -ge 48 ]; then  # If >48h, use days
+                age=$(( ${age}/24 ))
+                unit="days"
+                if [ ${age} -ge 60 ]; then  # If >60 days, use months
+                    age=$(( ${age}/30 ))
+                    unit="months"
+                    if [ ${age} -ge 24 ]; then  # If >24 months, use years
+                        age=$(( ${age}/12 ))
+                        unit="years"
+                    fi
+                fi
+            fi
+        fi
+    fi
+    
+    clr='\E[1m'
+    if [[ `stat -c"%F" ${file}` == 'directory' ]]; then
+        clr='\E[1;34m'  # Bold blue
+    fi
+    
+    if [ ${#} -eq 1 ]; then
+        # echo -e "The ${stat#* } ${clr}'${file}'\E[0m is \E[1m${age} ${unit}\E[0m old."
+        echo -en "${age} ${unit} old  \t"
+        ls --color=auto -d ${file}
+    else
+        # echo -e "${age} ${unit}  \t ${clr}${file}\E[0m"
+        echo -en "${age} ${unit} old  \t"
+        ls --color=auto -d ${file}
+    fi
+done
+

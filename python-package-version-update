@@ -1,0 +1,66 @@
+#!/bin/bash
+
+##  python-package-version-update:  updates the version number of a Python package using pyproject.toml.
+## 
+##  Dependencies:
+##    - default (GNU) tools available on every serious operating system: bash, echo, read, cat, grep, sed, find, etc.
+## 
+##  2022-12-21, MvdS:  initial version.
+##  2023-09-18, MvdS:  replace setup.py with pyproject.toml and setup.cfg.
+##  2023-10-08, MvdS:  merge setup.cfg into pyproject.toml.
+
+function ask_update() {
+    # Ask to update the version to the proposed number; exit script if accepted.
+    VERSION=$1
+    VERSION1=$2
+    echo -en "Do you want to update the version number from \E[1;41m$VERSION\E[0m to \E[1;42m$VERSION1\E[0m (y/N)?  "
+    read -n1 ans  # Read 1 character max
+    echo
+    if [[ ${ans} == "y" || ${ans} == "Y" ]]; then  # Logical or
+        echo
+        echo -e "Updating version \E[1;41m$VERSION\E[0m to \E[1;42m$VERSION1\E[0m..."
+        sed -i "s|version *= *\"$VERSION\"|version = \"$VERSION1\"|" pyproject.toml
+        
+        # Catch version='...' and version="...":
+        VERSION2=`grep -E "^version *= *" pyproject.toml  |  sed -e "s|^version *= \(.*\)|\1|" -e 's|"||g'`
+        echo -e "New version: \E[1;42m$VERSION2\E[0m."
+        echo
+        
+        if [ $VERSION2 != $VERSION1 ]; then
+            echo
+            echo -e "\E[1;41mSomething went wrong while updating the version number.\E[0m"
+            echo -e "\E[1;41mPlease check your pyproject.toml.\E[0m"
+            echo
+            exit 1
+        fi
+        
+        exit 0
+    fi
+}
+
+
+# Catch version='...' and version="...":
+VERSION=`grep -E "^version *= *" pyproject.toml  |  sed -e "s|^version *= \(.*\)|\1|" -e 's|"||g'`
+
+# VERSION="1.2.3"
+echo -e "Current version: \E[1;41m$VERSION\E[0m."
+
+# For version X.Y.Z, get X,Y,Z:
+let XX=`echo $VERSION | sed 's|\([0-9]*\)\..*\..*|\1|'`
+let YY=`echo $VERSION | sed 's|.*\.\([0-9]*\)\..*|\1|'`
+let ZZ=`echo $VERSION | sed 's|.*\..*\.\([0-9]*\)|\1|'`
+
+let ZZ1=$ZZ+1
+ask_update $VERSION "$XX.$YY.$ZZ1"  # Ask to update the version to the proposed number; exit script if accepted
+
+let YY=$YY+1
+ask_update $VERSION "$XX.$YY.0"  # Ask to update the version to the proposed number; exit script if accepted
+
+let XX=$XX+1
+ask_update $VERSION "$XX.0.0"  # Ask to update the version to the proposed number; exit script if accepted
+
+echo
+echo -e "\E[1;41mNot replacing version number, aborting...\E[0m"
+echo
+
+exit 1

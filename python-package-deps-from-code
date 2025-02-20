@@ -1,0 +1,165 @@
+#!/bin/bash
+
+##  python-package-deps-from-code:  Get the dependencies for the Python code in the current directory.
+##  
+##  Dependencies:
+##    - default (GNU) tools available on every serious operating system: bash, echo, cat, grep, sed, sort, uniq, etc.
+##    - Python packages: pipreqs
+##  
+##  2021-05-04, MvdS:  initial version.
+##  TODO: replace setup.py with pyproject.toml.
+
+function print_help() {
+    command=`echo ${0} |sed -e 's/^.*\///g'`  # Remove path (e.g. ./)
+    echo ""
+    echo "This program gets the dependencies for the Python code in the current directory and prints them to stdout."
+    echo "If setup.py is present, it will print the dependencies reported there as well."
+    echo ""
+    echo "Syntax:  $command [OPTIONS] [DIRECTORY/IES]"
+    echo ""
+    echo "Options:"
+    echo "  -h  Print this help."
+    echo "  -v  Add verbosity (default=1)."
+    echo "  -q  Quiet: set verbosity to 0."
+    echo ""
+    exit 0
+}
+
+
+# Sort out command-line options:
+let VERBOSITY=1
+while getopts "hvq" opt; do
+    case $opt in
+        h) print_help;;
+        v) ((VERBOSITY=VERBOSITY+1));;
+        q) ((VERBOSITY=0));;
+    esac
+done
+
+# Remove options starting with - from argument list:
+ARGS=$(echo $@ | sed -e 's|^\-[^ ]* ||g' -e 's| \-[^ ]*$||g' -e 's|\-[^ ]*||g' -e 's|^ ||g' -e 's| $||g')
+
+
+# Determine and report specified directories:
+SEARCHDIRS="."
+if [ "$ARGS" != "" ]; then
+    SEARCHDIRS="$ARGS"
+fi
+
+if [ $VERBOSITY -gt 0 ]; then
+    if [ "$SEARCHDIRS" == "." ]; then
+        echo "Finding Python files in the current directory and below."
+    else
+        echo "Finding Python files in the directory $SEARCHDIRS and below."
+    fi
+fi
+# exit
+
+# Directories to ignore:
+IGNOREDIRS='/docs/|/build/lib/|AddLater/|attic/|Attic/|Test/|test/'
+if [ $VERBOSITY -gt 1 ]; then
+    echo -n "Ignoring the following directories:  "
+    echo $IGNOREDIRS | sed -e 's/|/  /g' -e 's|^/| |g' -e 's| /| |g'
+fi
+
+
+# Files to ignore:
+IGNOREFILES='test_.*\.py$|.*_test\.py|test-.*\.py$|.*-test\.py'
+if [ $VERBOSITY -gt 1 ]; then
+    echo -n "Ignoring the following files:  "
+    echo $IGNOREFILES | sed -e 's/|/  /g' -e 's|^/| |g' -e 's| /| |g'
+fi
+
+
+# Packages to ignore:
+IGNOREPKGS='string|re|datetime|math|random|statistics|pathlib|glob|configparser|csv|os|time|argparse|logging|sys|json|setuptools|dataclasses|socket|subprocess'  # See https://docs.python.org/3/library/  -=  added setuptools myself
+if [ "$ARGS" != "" ]; then
+    IGNOREPKGS="$IGNOREPKGS|$ARGS"  # CHECK: $ARGS is usually package name...
+fi
+if [ $VERBOSITY -gt 1 ]; then
+    echo -n "Ignoring the following packages:  "
+    echo $IGNOREPKGS | sed 's/|/  /g'
+fi
+
+
+# Find Python files in the selected directories, barring the ignored directories,
+#   removing leading './', sorting, uniqing, putting in a single line and removing trailing spaces:
+FILES=$(find $SEARCHDIRS -name "*.py" \
+            | grep -vE $IGNOREDIRS \
+            | grep -vE $IGNOREFILES \
+            | sed 's|^\./||' \
+            | sort | uniq \
+            | sed -z 's|\n|  |g' \
+            | sed 's|  $||')
+
+if [ $VERBOSITY -gt 0 ]; then
+    echo "Considering the following files:  $FILES" | sed -e 's|  |, |g' -e 's|:, |: |'
+fi
+
+
+# Match " import <package>" and " from <package> import <module>":
+IMPORTMATCHSTR='^ *import |^ *from [^\.].* import '
+
+
+# Show all import matches:
+if [ $VERBOSITY -gt 2 ]; then
+    echo -e "\nImport statements found:"
+    ack "$IMPORTMATCHSTR" $FILES
+fi
+
+CODEDEPS="No import statements found in code files."
+if [ -e $SEARCHDIRS ]; then
+        # Match import statements in selected files.
+        # CODEDEPS=$(grep --no-filename -E "$IMPORTMATCHSTR" $(find $SEARCHDIRS -name "*.py") \
+            CODEDEPS=$(grep --no-filename -E "$IMPORTMATCHSTR" $FILES \
+                           | grep -vE 'from \..* import .' \
+                           | grep -vEw $IGNOREPKGS \
+                           | sed \
+                                 -e 's|from \(.*\) import .* as .*|\1|g' \
+                                 -e 's|import \(.*\) as .*|\1|g' \
+                                 -e 's|from \(.*\) import .*|\1|g' \
+                                 -e 's|^ *import ||g' \
+                                 -e 's|^\([^\.]*\)\..*|\1|' \
+                                 -e 's| ||g' \
+                           | sort | uniq \
+                           | sed -z 's|\n|, |g' \
+                           | sed -e 's|, $||'
+                    )
+fi
+
+# Report dependencies found in code:
+if [ $VERBOSITY -gt 0 ]; then
+    echo
+fi
+echo -e "Import list in current code:               \E[1;45m$CODEDEPS\E[0m"
+
+
+# Obtain and report dependencies from code using pipreqs:
+if [ -f requirements.txt ]; then
+    SETUPDEPS=`pipreqs --print --no-follow-links --mode no-pin $SEARCHDIRS  2> /dev/null | sort | sed -z 's|\n|, |g' | sed -e 's|, $||'`
+    #  --use-local - bit faster
+    echo -e "Dependency list from code using pipreqs:   \E[1;45m$SETUPDEPS\E[0m"
+fi
+
+if [ $VERBOSITY -gt 0 ]; then
+    echo
+fi
+
+
+# Obtain and report dependencies found in setup.py:
+if [ -f setup.py ]; then
+    SETUPDEPS=`grep 'install_requires' setup.py  | sed -e 's|install_requires||' -e "s|[='\[]||g" -e 's|\]||g' -e 's|,|, |g' -e 's|^ *||' -e 's|, $||'`
+    echo -e "Dependency list in setup.py:               \E[1;45m$SETUPDEPS\E[0m"
+fi
+
+# Obtain and report dependencies found in requirements.txt:
+if [ -f requirements.txt ]; then
+    SETUPDEPS=`cat requirements.txt | sort | sed 's|==.*$||' | sed -z 's|\n|, |g' | sed -e 's|, $||'`
+    echo -e "Dependency list in requirements.txt:       \E[1;45m$SETUPDEPS\E[0m"
+fi
+
+if [ $VERBOSITY -gt 0 ]; then
+    echo
+fi
+
+

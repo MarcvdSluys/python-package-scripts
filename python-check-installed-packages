@@ -1,0 +1,23 @@
+#!/bin/bash
+
+##  python-check-installed-packages:  checks installed PyPI packages for multiple versions.
+## 
+##  Dependencies:
+##    - default (GNU) tools available on every serious operating system: bash, echo, ls, find, grep, sed, etc.
+## 
+##  2022-10-21, MvdS:  initial version.
+
+for SITEPACKAGEDIR in `find ~/.local/lib/ -type d -name site-packages`; do
+    echo -e "\nChecking for multiple package versions in $SITEPACKAGEDIR..."
+    for PACKAGE in `ls $SITEPACKAGEDIR | grep -v '-'`; do
+        let NUMVER=`ls $SITEPACKAGEDIR | grep -E "^$PACKAGE-.*\.dist-info" | wc -l`
+        if [ $NUMVER -gt 1 ]; then
+            echo -e "\n\E[1;43mWarning: I found $NUMVER different versions of the package $PACKAGE:\E[0m"
+            ls $SITEPACKAGEDIR | grep -E "^$PACKAGE-.*\.dist-info" | sed "s|^.*$|$SITEPACKAGEDIR/&/|"
+        fi
+    done
+    
+done
+
+echo
+

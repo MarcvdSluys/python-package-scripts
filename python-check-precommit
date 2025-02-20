@@ -1,0 +1,29 @@
+#!/bin/bash
+
+##  python-test:  Test the Python code in the current directory.
+## 
+##  Dependencies:
+##    - default (GNU) tools available on every serious operating system: bash, echo, etc.
+##    - Python packages: pre-commit, (flake8)
+## 
+##  2021-05-03, MvdS:  initial version.
+
+echo -e "Testing the Python code in the current directory...\n"
+
+# # Stop the build if there are Python syntax errors or undefined names:
+# echo -e "\nFlake8 checking for errors:"
+# flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+# # flake8 . --count --show-source --statistics
+# 
+# echo -e "\nFlake8 checking for warnings:"
+# flake8 . --count --exit-zero --max-complexity=10  --max-line-length=200 --statistics --extend-exclude 'build/lib/'
+
+
+echo -e "Running pre-commit:"
+# pre-commit autoupdate  # Takes a lot of time
+# echo
+pre-commit gc
+echo
+pre-commit run --all-files
+
+echo

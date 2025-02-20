@@ -1,0 +1,95 @@
+#!/bin/bash
+
+##  python-package-docs-check:  Checks the Python/ReadTheDocs documentation for a given Python package directory.
+##  It is assumed you've set up your RtD config...
+##  
+##  Dependencies:
+##    - default (GNU) tools available on every serious operating system: bash, echo, find, sed, pwd, etc.
+##    - Python packages: pipreqs
+##  
+##  2022-08-20, MvdS:  initial version.
+
+# Check command-line arguments:
+if [ ${#} -eq 0 ]; then
+    command=`echo ${0} |sed -e "s/^.*\///g"`  # Remove path (e.g. ./)
+    echo "${command}:  Checks the Python/ReadTheDocs documentation for a given Python package directory."
+    echo "Error: a single argument was expected"
+    echo "Syntax:  ${command} <Python-package directory>"
+    echo
+    echo "Note: to create initial RtD documentation for a new project, run python-docs-sphinx-rtd-init."
+    exit 1
+fi
+
+
+
+# Exit the script (or not):
+function exit_script() {
+    # Tidy up:
+    rm -f .check-documentation.log
+    # cd - &> /dev/null
+    
+    # When a warning or error was issued, report that and quit:
+    if [ $2 == 'warning' ]; then
+        echo -e "\E[1;43mWarnings were issued when building the documentation for $1, aborting...\E[0m\n"
+        exit 91
+    fi
+    if [ $2 == 'error' ]; then
+        echo -e "\E[1;41mErrors were issued when building the documentation for $1, aborting...\E[0m\n"
+        exit 92
+    fi
+    if [ $2 == 'ok' ]; then
+        echo -e "\E[1;32mThe documentation for $1 seems to have been built correctly.\E[0m\n"
+    fi
+}
+
+
+# Check the Python/ReadTheDocs documentation for a given Python package directory.
+PKG_DIR=$1
+PKG_NAME=$1
+
+if [ $PKG_NAME == '.' ]; then
+    PKG_NAME=`pwd | sed 's|^.*/||'`  # Name of the current dir
+fi
+
+
+if [ ! -d $PKG_DIR/docs ]; then
+    echo -e "Python package \E[1;44m$PKG_NAME\E[0m: \t \E[1;41mNo documentation directory was found.\E[0m"
+    echo -e "\nNote: to create initial RtD documentation for a new project, run  \E[1;32mpython-docs-sphinx-rtd-init\E[0m"
+    exit 11
+fi
+if [ ! -f $PKG_DIR/docs/index.rst ]; then
+    echo -e "Python package \E[1;44m$PKG_NAME\E[0m: \t A documentation directory was found, but \E[1;41mno index.rst was found.\E[0m"
+    echo -e "\nNote: to create initial RtD documentation for a new project, run  \E[1;32mpython-docs-sphinx-rtd-init\E[0m"
+    exit 12
+fi
+if [ ! -f $PKG_DIR/docs/conf.py ]; then
+    echo -e "Python package \E[1;44m$PKG_NAME\E[0m: \t A documentation directory was found, but \E[1;41mno conf.py was found.\E[0m"
+    echo -e "\nNote: to create initial RtD documentation for a new project, run  \E[1;32mpython-docs-sphinx-rtd-init\E[0m"
+    exit 13
+fi
+
+echo -e "Python package \E[1;44m$PKG_NAME\E[0m: \t \E[1;42mA documentation directory and files were found.\E[0m"
+
+# Sphinx/RtD files exist, test the docs:
+cd $PKG_DIR/docs
+pwd
+make clean  # Without this, doctest does not work!
+make doctest 2>&1 | tee .check-documentation.log \
+    | sed \
+          -e 's|WARNING|\x1B[43;1m&\x1B[0m|g' \
+          -e 's|ERROR|\x1B[41;1m&\x1B[0m|g' \
+          -e 's|[0-9]* warnings*|\x1B[43;1m&\x1B[0m|g' \
+          -e 's|[0-9]* errors*|\x1B[41;1m&\x1B[0m|g' \
+          -e 's|build succeeded\.|\x1B[42;1m&\x1B[0m|g' \
+          -e 's|build succeeded,|\x1B[32;1m&\x1B[0m|g'
+
+if grep -qiE 'warning' .check-documentation.log; then
+    exit_script "$PKG_NAME" 'warning'
+elif grep -qiE 'warning' .check-documentation.log; then
+    exit_script "$PKG_NAME" 'error'
+else
+    exit_script "$PKG_NAME" 'ok'
+fi
+
+cd - &> /dev/null
+

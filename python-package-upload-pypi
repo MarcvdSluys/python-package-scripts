@@ -1,0 +1,280 @@
+#!/bin/bash
+
+##  python-package-upload-pypi: create and upload the Python package in the current directory to PyPI using twine.
+## 
+##  Dependencies:
+##    - default (GNU) tools available on every serious operating system: bash, echo, cat, grep, sed, find, stat, git, etc.
+##    - custom scripts: python-check-installed-packages, python-package-version-update, python-check-precommit, python-package-docs-check, python-package-deps-from-code, python-package-requirements-txt, age
+## 
+##  2020-08-20, MvdS: initial version, taken from setup.py in package meteoserver.
+##  2023-09-18, MvdS:  replace setup.py with pyproject.toml and setup.cfg.
+##  2023-10-08, MvdS:  merge setup.cfg into pyproject.toml.
+##  2025-02-20, MvdS:  get PyPI token from ~/.python-my-pypi-token
+
+# Get my private PyPI token:
+MY_PYPI_TOKEN=`cat ~/.python-my-pypi-token`
+
+# Initialise:
+let iStep=0
+let nSteps=16
+
+CLR='\E[1;44m'  # White on blue
+# CLR='\E[1;35m'  # Bold magenta
+
+function print_step {
+    let iStep++
+    stepTitle=$1
+    echo -e "\n${CLR}####################################################################################################\E[0m"
+    echo -e "${CLR}Step $iStep/$nSteps:  $stepTitle:\E[0m"
+}
+
+function continue_dialog {
+    echo -en "\n${CLR}Do you want to continue (y/N)?\E[0m  "
+    read -n1 ans  # Read 1 character max
+    echo
+    if [[ ${ans} != "y" && ${ans} != "Y" ]]
+    then
+	    echo -e "Aborting...\n"
+	    exit 1
+    fi
+    echo
+}
+
+
+####################################################################################################
+echo -e "\n${CLR}#############################################################################################################\E[0m"
+echo -e "${CLR}###  This script will create and upload the Python package in the current directory to PyPI in $nSteps steps.  ###\E[0m"
+echo -e "${CLR}#############################################################################################################\E[0m"
+
+continue_dialog
+
+
+####################################################################################################
+# Check that we don't have multiple versions installed of potential dependencies:
+print_step "Check user-installed packages for multiple versions"
+python-check-installed-packages
+continue_dialog
+
+
+####################################################################################################
+# Check that we're in a package directory:
+if [ ! -e pyproject.toml ]; then
+    echo -e "\n\n\E[1;41mThis directory does not contain a file named pyproject.toml.\E[0m\n\n"
+    echo -e "Please ensure that you are in the package directory or create a pyproject.toml\n"
+    echo -e "Aborting...\n"
+    exit 1
+fi
+
+
+####################################################################################################
+print_step "Check package name"
+PKGNAME=`grep -E "^name *= *" pyproject.toml | sed -e "s|^name *= *\(.*\) *$|\1|" -e 's|"||g'`
+echo  -e "Package name: \E[1;45m$PKGNAME\E[0m"
+echo
+continue_dialog
+
+
+####################################################################################################
+print_step "Check age of pyproject.toml"
+age pyproject.toml  |  sed -e 's/ is \(.*\) old\./ is \x1B[31;1m\1 old.\x1B[0m/'
+continue_dialog
+
+
+####################################################################################################
+print_step "Check version number"
+# Catch version='...' and version="...":
+VERSION=`grep -E "^version *= *" pyproject.toml  |  sed -e "s|^version *= \(.*\)|\1|" -e 's|"||g'`
+
+echo -e "Version: \E[1;45m$VERSION\E[0m"
+DISTFILE="dist/$PKGNAME-$VERSION.tar.gz"
+while [ -e $DISTFILE ]; do
+    # echo -e "\n\n\E[1;41mERROR: $DISTFILE already exists\E[0m - are you using an old version number in pyproject.toml?\n\n"
+    # echo -e "Aborting...\n"
+    # exit 1
+    
+    echo -e "\n\E[1;43mWARNING: $DISTFILE already exists\E[0m - you should update the version number in pyproject.toml\n"
+    python-package-version-update || exit 1
+    VERSION=`grep -E "^version *= *" pyproject.toml  |  sed -e "s|^version *= \(.*\)|\1|" -e 's|"||g'`
+    DISTFILE="dist/$PKGNAME-$VERSION.tar.gz"
+done
+
+continue_dialog
+
+
+####################################################################################################
+print_step "Check Python code"
+if [ -f .pre-commit-config.yaml ]; then
+    python-check-precommit
+    # pytest
+else
+    echo -e "\E[1;43mWarning:\E[0m pre-commit configuration file .pre-commit-config.yaml not found, skipping..."
+fi
+continue_dialog
+
+
+
+####################################################################################################
+print_step "Check Python documentation"
+python-package-docs-check .
+continue_dialog
+
+
+
+####################################################################################################
+print_step "Compare import and dependency lists"
+python-package-deps-from-code -v $PKGNAME
+continue_dialog
+
+
+
+####################################################################################################
+print_step "Regenerating requirements.txt"
+if [ -e requirements.txt ]; then
+    if [[ `stat --format="%A" requirements.txt | grep w` != "" ]]; then  # If file is writable
+		# pipreqs --force --no-follow-links --savepath requirements.txt $PKGNAME
+		# pipreqs --no-follow-links --print $PKGNAME 2> /dev/null  | sort > requirements.txt
+		python-package-requirements-txt $PKGNAME
+		echo -e "${CLR}Diff:\E[0m"
+		git diff --color=always -w -U1 requirements.txt | cat
+    else
+		echo -e "\n\E[1;41mWarning: requirements.txt is not writable.\E[0m  Verify that you locked it manually and check the contents:"
+		cat requirements.txt
+		echo
+		pipreqs --diff requirements.txt
+    fi
+    
+else  # requirements.txt does not exist yet
+    echo -e "\E[1;41mWarning: requirements.txt does not exist yet!\E[0m"
+    echo -en "\n${CLR}Do you want to create it now?  [y/N]  \E[0m"
+    read -n1 ans  # Read 1 character max
+    if [[ ${ans} == "y" || ${ans} == "Y" ]]; then
+		python-package-requirements-txt $PKGNAME
+		echo "New requirements.txt created:"
+		cat requirements.txt
+		# echo "Don't forget to add it to the git repo!!!"
+    fi
+fi
+echo
+
+if [ -e requirements.txt ]; then
+    if [[ `git list-all-files | grep requirements.txt` == "" ]]; then
+		echo "Adding requirements.txt to git repository..."
+		git add requirements.txt
+    fi
+fi
+echo
+continue_dialog
+
+
+
+####################################################################################################
+print_step "Check git status"
+# gitst:
+git br
+echo
+git status -sbv -uno
+echo
+
+# Check for Uncommitted changes:
+git status -s | grep -v '??' &> /dev/null && {
+    echo -e "\E[1;41mThere are uncommitted changes!\E[0m"
+    echo -en "\n${CLR}Do you want to commit them now?  [y/N]  \E[0m"
+    read -n1 ans  # Read 1 character max
+    if [[ ${ans} == "y" || ${ans} == "Y" ]]; then
+	    # Create a git-commit-message template:
+	    echo "Prepare release of v$VERSION" > .git-commit-message-template  # Need to add period manually in order to change message...
+	    gitcommitall  # Commit
+	    # gitpush  # Push after creating tag below
+    fi
+    echo
+    
+    # gitst:
+    git br
+    echo
+    git status -sbv -uno
+    echo
+}
+
+continue_dialog
+
+
+
+####################################################################################################
+print_step "Adding git tag"
+# echo "Please give a message for git tag and to serve as a twine upload comment:"
+# echo -n "  Message =  "
+# read MESG
+
+echo -e "Tag name: \E[1;45mv$VERSION\E[0m"
+# echo -e "Tag message: \E[1;45m$MESG\E[0m"
+continue_dialog
+git tag "v$VERSION" # -m "$MESG"
+gitpush
+
+
+
+
+# rm -rf *.egg-info/        # Make 'really clean'
+
+
+
+####################################################################################################
+print_step "Creating package files"
+
+rm -rf build/lib/$PKGNAME/    # Ensure we start with an empty build dir
+
+mv -f .git .git_temp          # Prevent the setuptools_scm plugin from adding (only) the contents of the git repo to the tarball
+python -m build               # Create the package: wheel and sdist
+mv -f .git_temp .git          # Put git repo back
+continue_dialog
+
+
+
+
+####################################################################################################
+# Do some basic checks:
+# Check tarball contents:
+print_step "Check Python source files included in tarball"
+tar tfz "dist/$PKGNAME-$VERSION.tar.gz" | grep -E "\.py"
+continue_dialog
+
+# Check wheel contents:
+print_step "Check Python source files included in wheel"
+unzip -l "dist/$PKGNAME-$VERSION-py*.whl" | grep -E "\.py" \
+    | sed 's| \([0-9][0-9]\)-\([0-9][0-9]\)-\([0-9][0-9][0-9][0-9]\) | \3-\1-\2 |' | sort -k2
+# sed: date from mm-dd-yyyy -> yyyy-mm-dd, sort by date
+continue_dialog
+
+# Check package files:
+FILES="dist/$PKGNAME-$VERSION.tar.gz dist/$PKGNAME-$VERSION-py3-none-any.whl"
+print_step "Check package files"
+twine check $FILES  |  sed -e 's/PASSED/\x1B[1;32;1m&\x1B[0m/'
+continue_dialog
+
+
+
+####################################################################################################
+print_step "Check package files that will be uploaded"
+# FILES=`ls -rt dist/* | tail -2`
+echo $FILES | sed 's| |\n|'
+continue_dialog
+
+
+
+####################################################################################################
+# Upload the package to PyPI:
+print_step "Uploading the package to PyPI"
+continue_dialog
+# edit ~/.local/bin/twine to the correct python version if causing trouple with urllib3
+twine upload -u __token__ -p "${MY_PYPI_TOKEN}" \
+      --skip-existing --verbose $FILES \
+    |  sed -e 's/Skipping .* because it appears to already exist/\x1B[1;41;1m&\x1B[0m/' \
+    || exit 1
+
+#	  --comment "$MESG" --skip-existing --verbose $FILES \
+    
+
+echo -e "\n\n\n${CLR}#############################################################################################################\E[0m"
+echo -e "${CLR}###  Package creation and upload script completed  ##########################################################\E[0m"
+echo -e "${CLR}#############################################################################################################\E[0m"
+echo -e "\n"

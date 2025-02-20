@@ -1,0 +1,89 @@
+#!/bin/bash
+
+##  python-package-requirements-txt:  create the requirements.txt for the current Python project.
+## 
+##  Dependencies:
+##    - default (GNU) tools available on every serious operating system: bash, echo, read, cat, grep, sed, find, sort, uniq, etc.
+##    - Python packages: pipreqs
+## 
+##  2021-07-01, MvdS:  initial version.
+##  2021-08-01, MvdS:  warn if no package name is specified.
+
+
+PKGNAME=""
+
+# If no arguments, then no package name specified:
+if [ $# -eq 0 ]; then
+    echo -e "\n\E[1;31mWARNING: You did not specify a package name - this may lead to errors!\E[0m"
+    
+    if [ -f pyproject.toml ]; then
+        PKGNAME=`grep -E "^name *= *"    pyproject.toml | sed -e "s|^.*name *= *\(.*\).*$|\1|" -e 's|"||g'`
+        echo -e "\nA \E[1;32mpyproject.toml\E[0m was found, suggesting that the current package is called \E[1;32m$PKGNAME\E[0m."
+        echo -en "\nDo you want to use that package name (Y/n)?  "
+        read -n1 ans  # Read 1 character max
+        echo
+        
+        if [[ ${ans} == "n" || ${ans} == "N" ]]; then
+            PKGNAME=""
+            echo -en "\nDo you want to continue anyway (y/N)?  "
+            read -n1 ans  # Read 1 character max
+            echo
+            if [[ ${ans} != "y" && ${ans} != "Y" ]]; then
+                echo -e "\n\E[1;31mCancelled.\E[0m\n"
+                exit
+            fi
+            
+        fi
+    else
+        echo -en "\nDo you want to continue (y/N)?  "
+        read -n1 ans  # Read 1 character max
+        echo
+        if [[ ${ans} != "y" && ${ans} != "Y" ]]; then
+            echo -e "\n\E[1;31mCancelled.\E[0m\n"
+            exit
+        fi
+    fi
+    
+    # Argument(s) == package name:
+else
+    PKGNAME="$@"
+fi
+
+
+# Check file name:
+if [ "$PKGNAME" == "." ]; then
+    echo -e "\n\E[1;41mERROR:\E[0m package name should not be \"$PKGNAME\", aborting...\n"
+    exit 1
+fi
+
+
+# Create and show requirements.txt:
+pipreqs --force --no-follow-links --print  $PKGNAME  |  sort | uniq > requirements.txt
+
+echo -e "\n\E[1;44mContents of requirements.txt:\E[0m"
+cat requirements.txt
+
+
+if [ -d docs/ ]; then
+    echo -e "\nDocument directory found; copying requirements.txt to docs/ and removing some package versions..."
+    
+    # Copy package requirements.txt, and add package itself, RtD theme:
+    echo $PKGNAME > docs/requirements.txt
+    cat requirements.txt >> docs/requirements.txt
+    echo "sphinx-rtd-theme" >> docs/requirements.txt
+    
+    # Remove VERSION from NumPy, Pandas, matplotlib, ..., since they cause errors in ReadTheDocs!
+    sed -i \
+        -e 's|^numpy==[0-9]*\.[0-9]*.*$|numpy|g' \
+        -e 's|^pandas==[0-9]*\.[0-9]*.*$|pandas|g' \
+        -e 's|^matplotlib==[0-9]*\.[0-9]*.*$|matplotlib|g' \
+        -e 's|^scipy==[0-9]*\.[0-9]*.*$|scipy|g' \
+        docs/requirements.txt
+    
+    echo -e "\n\E[1;44mContents of docs/requirements.txt:\E[0m"
+    cat docs/requirements.txt
+fi
+
+
+
+echo

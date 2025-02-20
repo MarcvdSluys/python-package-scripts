@@ -1,0 +1,8 @@
+#+title: Python package scripts
+
+Here are the bash scripts I use to create and check Python packages and to upload them to PyPI.  These are
+very much tailored to my usage and laptop system, but you may want to adapt them for your case.  The main
+reason for these is my faulty memory --- as I do not perform most of these tasks on a daily basis, I need to
+look up how to do them.  I basically turned my notes in to bash scripts.  Note that not very much design went
+into writing these scripts; they evolved organically as my needs became clear.
+

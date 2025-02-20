@@ -1,0 +1,145 @@
+#!/bin/bash
+
+##  python-package-pypi-new:  creates a new PyPI Python package.
+## 
+##  Dependencies:
+##    - default (GNU) tools available on every serious operating system: bash, echo, mv, mkdir, date, sed, git, etc.
+##    - cdif (Perl)
+##    - files: directory with templates
+## 
+##  2022-01-04, MvdS:  initial version.
+
+# Directory for my Python-package templates:
+MY_TEMPLATE_DIR="${HOME}/.templates/python-package"
+
+# CLR='\E[1;44m'  # White on blue
+CLR='\E[1;35m'  # Bold magenta
+
+# Check command-line arguments:
+if [ ${#} -ne 1 ]; then
+    command=`echo ${0} |sed -e "s/^.*\///g"`  # Remove path (e.g. ./)
+    echo "${command}:  creates a new PyPI Python package."
+    echo "Error: a single argument was expected: the (capitalised) package name."
+    echo "Syntax:  ${command} PackageName"
+    exit 1
+fi
+
+
+let iStep=0
+let nSteps=7
+
+function print_step {
+    let iStep++
+    stepTitle=$1
+    echo -e "\n${CLR}####################################################################################################\E[0m"
+    echo -e "${CLR}Step $iStep/$nSteps:  $stepTitle:\E[0m"
+}
+
+function continue_dialog {
+    echo -en "\n${CLR}Do you want to continue (y/n)?\E[0m  "
+    read -n1 ans  # Read 1 character max
+    echo
+    if [[ ${ans} != "y" && ${ans} != "Y" ]]; then
+        echo -e "\E[1;41mAborting.\E[0m\n"
+        exit
+    fi
+    echo
+}
+
+
+
+
+# Package name:
+PKGNAME="$1"
+PKGNAMEL=`echo $PKGNAME | sed 's|.*|\L&|'`  # Lower-case file name
+
+
+echo
+echo -e "${CLR}#####################################################################################################################################\E[0m"
+echo -e "${CLR}###  This script will create a new, empty PyPI Python package called $PKGNAME or $PKGNAMEL in the current directory in $nSteps steps.\E[0m"
+echo -e "${CLR}#####################################################################################################################################\E[0m"
+continue_dialog
+
+
+
+print_step "Package description"
+echo -e "\nPlease give the package description as a short sentence, e.g.  A Python package to do things."
+echo -en "Description:  "
+read DESCRIPTION
+DESCRIPTION=`echo "$DESCRIPTION." | sed -e 's|^.|\U&|' -e 's|\.\.|\.|g'`  # Start with upper case, end with single period.
+
+
+
+print_step "Package dependencies"
+echo -e '\nPlease give the package dependencies as a comma-separated list of doubly-quoted elements, e.g.  "numpy","pandas","fortranformat"'
+echo -en "Dependencies:  "
+read DEPENDENCIES
+RDEPENDENCIES=$(echo $DEPENDENCIES | sed -e 's|"|\`|g' -e 's|,|, |g' -e 's|, \([^,]*\)$| and \1|')  # For README.md: `dep1`, `dep2` and `dep3`
+
+
+
+print_step "Package keywords"
+echo -e '\nPlease give the package keywords as a comma-separated list of doubly-quoted elements, e.g.  "sun","astronomy"'
+echo -en "Keywords:  "
+read KEYWORDS
+
+
+
+print_step "Check parameters"
+echo -e "\n${CLR}Using the following parameters:\E[0m"
+echo "Package description:           $DESCRIPTION"
+echo "pyproject.toml dependencies:   [$DEPENDENCIES]"
+echo "README.md dependencies:        $RDEPENDENCIES"
+echo "Package keywords:              [$KEYWORDS]"
+continue_dialog
+
+
+THEYEAR=`date +%Y`  # Current year
+
+
+# Copy template:
+echo -e "\nCopying template..."
+cp -vi ${MY_TEMPLATE_DIR}/* .
+mkdir $PKGNAMEL
+mv -f __init__.py $PKGNAMEL
+
+
+echo -e "\nAdding template to git repository..."
+git init .
+git add -f pyproject.toml README.md LICENCE $PKGNAMEL/__init__.py
+
+
+echo -e "\nAdapting template..."
+sed -i \
+    -e "s|PackageName|$PKGNAME|g" \
+    -e "s|packagename|$PKGNAMEL|g" \
+    -e "s|ShortDescription|$DESCRIPTION|g" \
+    -e "s|\"dependency1\",\"dependency2\"|$DEPENDENCIES|g" \
+    -e 's|`dependency1` and `dependency2`|'"${RDEPENDENCIES}"'|g' \
+    -e "s|\"keyword1\",\"keyword2\"|$KEYWORDS|g" \
+    -e "s|THEYEAR|${THEYEAR}|g" \
+    pyproject.toml README.md $PKGNAMEL/__init__.py
+
+
+
+print_step "Check changes in pyproject.toml"
+cdif -wb --nocommand --nounknown --colormap="COMMAND=W,COMMAND=W,OMARK=r,OTEXT=W,NMARK=g,NTEXT=W,OCHANGE=DELETE=DR,NCHANGE=APPEND=DG" ${MY_TEMPLATE_DIR}/pyproject.toml .
+continue_dialog
+
+
+print_step "Check changes in README.md"
+cdif -wb --nocommand --nounknown --colormap="COMMAND=W,COMMAND=W,OMARK=r,OTEXT=W,NMARK=g,NTEXT=W,OCHANGE=DELETE=DR,NCHANGE=APPEND=DG" ${MY_TEMPLATE_DIR}/README.md .
+continue_dialog
+
+
+print_step "Check changes in $PKGNAMEL/__init__.py"
+cdif -wb --nocommand --nounknown --colormap="COMMAND=W,COMMAND=W,OMARK=r,OTEXT=W,NMARK=g,NTEXT=W,OCHANGE=DELETE=DR,NCHANGE=APPEND=DG" ${MY_TEMPLATE_DIR}/__init__.py $PKGNAMEL
+continue_dialog
+
+
+
+
+echo -e "\nA bare pyproject.toml, README.md, LICENCE and __init__.py have been generated and added to a (new) git repository."
+echo -e "You can do a git diff to see the changes made to the template again.\n"
+
+
