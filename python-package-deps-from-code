@@ -7,13 +7,13 @@
 ##    - Python packages: pipreqs
 ##  
 ##  2021-05-04, MvdS:  initial version.
-##  TODO: replace setup.py with pyproject.toml.
+##  2025-03-15, MvdS:  replace setup.py with pyproject.toml.
 
 function print_help() {
     command=`echo ${0} |sed -e 's/^.*\///g'`  # Remove path (e.g. ./)
     echo ""
     echo "This program gets the dependencies for the Python code in the current directory and prints them to stdout."
-    echo "If setup.py is present, it will print the dependencies reported there as well."
+    echo "If pyproject.toml is present, it will print the dependencies reported there as well."
     echo ""
     echo "Syntax:  $command [OPTIONS] [DIRECTORY/IES]"
     echo ""
@@ -146,10 +146,10 @@ if [ $VERBOSITY -gt 0 ]; then
 fi
 
 
-# Obtain and report dependencies found in setup.py:
-if [ -f setup.py ]; then
-    SETUPDEPS=`grep 'install_requires' setup.py  | sed -e 's|install_requires||' -e "s|[='\[]||g" -e 's|\]||g' -e 's|,|, |g' -e 's|^ *||' -e 's|, $||'`
-    echo -e "Dependency list in setup.py:               \E[1;45m$SETUPDEPS\E[0m"
+# Obtain and report dependencies found in pyproject.toml:
+if [ -f pyproject.toml ]; then
+    SETUPDEPS=`grep 'dependencies' pyproject.toml  |  sed -e 's|dependencies||' -e "s|[='\[]||g" -e 's|\]||g' -e 's|,|, |g' -e 's|^ *||' -e 's|, $||' -e 's|"||g'`
+    echo -e "Dependency list in pyproject.toml:         \E[1;45m$SETUPDEPS\E[0m"
 fi
 
 # Obtain and report dependencies found in requirements.txt:
